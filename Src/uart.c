@@ -21,7 +21,7 @@ void uart1_init(void)
     USART1->BRR = 0x341;
     USART1->CR1 |= 1<<13|1<<2|1<<3;
 }
-char uart_rx()
+uint8_t uart_rx()
 {
    while(!((USART1->SR>>5)&1));
    return USART1->DR;;

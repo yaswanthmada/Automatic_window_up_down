@@ -8,7 +8,7 @@
 #include"main.h"
 #include"uart.h"
 #include"automatic_updown.h"
-#define SELECT_LEFT_RIGHT_DOOR 2
+//#define SELECT_LEFT_RIGHT_DOOR 1
 extern int motor_current();
 extern void delay_ms(int ms);
 extern int can_switch_status;
@@ -17,6 +17,8 @@ extern int can_switch_status;
 	 RCC->APB2ENR|=RCC_APB2ENR_IOPAEN;//CLOCK FOR PORT-A
 	 GPIOA->CRL&=~(0XFFFFFFFF);
 	 GPIOA->CRH&=~(0XFFFFFFFF);
+	 GPIOA->CRL|=(1<<3);//PA0 for DOOR Switch
+	 GPIOA->BSRR|=1<<0;//pa0 as high
 	 //PA-1 & PA-2 pins to control relay modules and these two pins are output pins
 	 GPIOA->CRL|=(1<<5);
 	 GPIOA->BSRR|=(1<<1);//PA1 IS HIGH
@@ -30,6 +32,13 @@ extern int can_switch_status;
 	 GPIOA->BSRR|=(1<<5);
 	 GPIOA->CRL|=(1<<27);//PA6 IS HIGH(WINDOW_DOWN_SWITCH)
 	 GPIOA->BSRR|=(1<<6);
+	 GPIOA->CRL|=0b1000;
+	 GPIOA->BSRR|=0b1;
+	 /****************LED indication for door open or close ***************/
+	  RCC->APB2ENR|=RCC_APB2ENR_IOPBEN;
+	  GPIOB->CRL &= ~(0xF << (2* 4));
+	  GPIOB->CRL |= (0x2 << (2 * 4));
+	  GPIOB->BRR = (1 << 2);
 #if SELECT_LEFT_RIGHT_DOOR==2
 	 GPIOA->CRL|=(1<<31);//PA7 IS HIGH
 	 GPIOA->BSRR|=(1<<7);
@@ -53,7 +62,6 @@ extern int can_switch_status;
  }
  void window_motor_stop(void)
  {
-	  // 	uart_string("not1 ");
 	 GPIOA->BSRR|=(1<<1);
 	 GPIOA->BSRR|=(1<<2);
  }
@@ -85,14 +93,18 @@ extern int can_switch_status;
  int check_switch_status(void)
  {
 #if SELECT_LEFT_RIGHT_DOOR==1
+	 /* checking the left side switch status, it is in normal position then receive the signal from right
+	 side window switch which is controlling left side door and perform either up or down or normal*/
    c:if((GPIOA->IDR>>5&1)&&(GPIOA->IDR>>6&1))
    {
-	   delay_ms(1);
+	   HAL_Delay(5);
 	   if((!(GPIOA->IDR>>5&1))||(!(GPIOA->IDR>>6&1)))
 	   {
 		   goto c;
 	   }
-	   return can_switch_status;
+	   uint8_t k=uart_rx();
+	   uart_tx(k);
+	   return (k-'0');
    }
 #endif
    	 sw1:if(((GPIOA->IDR>>5)&1)==0)
@@ -124,19 +136,20 @@ extern int can_switch_status;
 	 static  int press_time=0,current_time=0;
 	 if(switch_status!=NORMAL_STATE)
 	 {
-		press_time=HAL_GetTick();
+		press_time=HAL_GetTick();//tick for "ms"
        if(switch_status==UP_STATE)
        {
           if(((GPIOA->IDR>>3)&1))//UP LIMIT switch not pressed
           {
         	 window_motor_up();
-        	 while(((GPIOA->IDR>>5)&1)==0)
+        	 while(check_switch_status()==UP_STATE)
         	 {
         		current_time=(HAL_GetTick()-press_time);
         		if(current_time>500)
         		{
         			while(((GPIOA->IDR>>3)&1)&&(!((check_switch_status())==DOWN_STATE))&&(motor_current()));
-             		while(!((GPIOA->IDR>>6)&1));//wait for down switch release
+        	        window_motor_stop();
+        	        while(check_switch_status()==DOWN_STATE);
              		break;
         		}
         	 }
@@ -148,20 +161,50 @@ extern int can_switch_status;
            if(((GPIOA->IDR>>4)&1))//DOWN LIMIT switch not pressed
            {
          	 window_motor_down();
-         	 while(((GPIOA->IDR>>6)&1)==0)
+        	 while(check_switch_status()==DOWN_STATE)
          	 {
-         		current_time=(HAL_GetTick()-press_time);
+         		current_time=(HAL_GetTick()-press_time);//switch press time greater than half second goes to automatic
          		if(current_time>500)
          		{
-         		while(((GPIOA->IDR>>4)&1)&&(!((check_switch_status())==UP_STATE)));
-         		window_motor_stop();
-         		while(!((GPIOA->IDR>>5)&1));//wait for up switch release
-         		break;
+         		while(((GPIOA->IDR>>4)&1)&&(!((check_switch_status())==UP_STATE)))
+         		{
+             		current_time=(HAL_GetTick()-press_time);//if down limit switch fails motorauto matically stopss
+             		if(current_time>10000)
+             		{
+             			break;
+             		}
          		}
-         	 }
+         		window_motor_stop();
+         		while(check_switch_status()==UP_STATE);//wait for up switch release
+         		break;
+         	    }
+            }
             window_motor_stop();
-           }
-       }
+          }
+	  }
 	 }
  }
-
+ /***************************************CHECK DOOR OPEN OR CLOSE*******************************************/
+void check_door_open_close(void)
+{
+  check_open:if((GPIOA->IDR>>0&1)==0)
+  {
+	  HAL_Delay(5);
+	  if((GPIOA->IDR>>0&1))
+	  {
+		 goto check_open;
+	  }
+	  GPIOB->BSRR |= (1 <<2);//LED ON
+	  uart_int(DOOR_OPEN);
+  }
+  check_close:if((GPIOA->IDR>>0&1)==1)
+  {
+	  HAL_Delay(5);
+	  if(!(GPIOA->IDR>>0&1))
+	  {
+		 goto check_close;
+	  }
+	  GPIOB->BRR |= (1 << 2);// LED OFF ff
+	  uart_int(DOOR_CLOSE);
+  }
+}

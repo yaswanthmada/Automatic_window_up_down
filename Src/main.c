@@ -25,7 +25,6 @@
 #include"automatic_updown.h"
 #include"adc.h"
 #include"uart.h"
-#include"timer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,13 +39,18 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+/*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ SELECT_LEFT_RIGHT_DOOR =1 means left door
+  SELECT_LEFT_RIGHT_DOOR =2 means right door
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-float THRESHOLD_CURRENT=9;
+float THRESHOLD_CURRENT=9.5;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,15 +98,19 @@ int main(void)
 window_automatic_updown_gpio_init();
 adc_init();
 uart1_init();
-timer1_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	   // uart_float(motor_current());
+	  check_door_open_close();
 	  auto_up_down();
+#if SELECT_LEFT_RIGHT_DOOR==2
+	  uart_int(check_left_side_switch_status());
+#endif
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

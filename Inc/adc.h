@@ -11,9 +11,9 @@
 #include<stdint.h>
 void delay_ms(int );
 void adc_init(void);
-uint16_t adc_read(void);
+int adc_read(void);
 float avg_adc(void);
 int motor_current(void);
-uint32_t movingarray(uint16_t n);
-uint32_t sumofaverage(uint16_t *ar);
+int movingarray(uint16_t n);
+int sumofaverage(uint16_t *ar);
 #endif /* INC_ADC_H_ */

@@ -12,7 +12,7 @@
 
 void uart_init();
 void uart_tx(uint8_t c);
-char uart_rx();
+uint8_t uart_rx();
 void uart_string(char *);
 void uart_int(int);
 void uart1_init(void);
